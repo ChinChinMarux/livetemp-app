@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import * as SplashScreen from "expo-splash-screen";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -6,6 +7,7 @@ import { enableScreens } from "react-native-screens";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { MonitoringScreen } from "./src/screens/MonitoringScreen.js";
 import { ControlScreen } from "./src/screens/ControlScreen.js";
+import { ProfileScreen } from "./src/screens/ProfileScreen.js";
 import { assertConfig } from "./src/services/config.js";
 import { tokens } from "./src/theme/tokens.js";
 
@@ -14,9 +16,13 @@ const { color } = tokens;
 
 enableScreens(true);
 
+// setOptions requires a dev/release build (not supported in Expo Go)
+SplashScreen.preventAutoHideAsync();
+
 export default function App() {
   useEffect(() => {
     assertConfig();
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   const theme = {
@@ -62,13 +68,19 @@ export default function App() {
             },
             tabBarHideOnKeyboard: true,
             tabBarIcon: ({ color: iconColor }) => {
-              const iconName = route.name === "Monitoring" ? "pulse" : "options";
+              const iconName =
+                route.name === "Monitoring"
+                  ? "pulse"
+                  : route.name === "Control"
+                    ? "options"
+                    : "person-circle";
               return <Ionicons name={iconName} size={24} color={iconColor} />;
             },
           })}
         >
           <Tab.Screen name="Monitoring" component={MonitoringScreen} />
           <Tab.Screen name="Control" component={ControlScreen} />
+          <Tab.Screen name="Profil" component={ProfileScreen} />
         </Tab.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

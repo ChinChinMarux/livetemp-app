@@ -11,6 +11,7 @@
       "bundleIdentifier": "com.example.livetemp"
     },
     "android": {
+      "package": "com.example.livetemp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -22,14 +23,24 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "backendUrl": "http://192.168.1.1:5002",
+      "backendUrl": "http://192.168.100.5:5002",
       "mqtt": {
         "brokerUrl": "wss://broker.hivemq.com:8884/mqtt",
-        "topic": "ppb/kelXX/iot/temperature"
+        "topic": "ppb/kel30/iot/temperature"
       }
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F8F9FB"
+        }
+      ],
+      "expo-status-bar"
     ]
   }
 }

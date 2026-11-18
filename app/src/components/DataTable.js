@@ -82,6 +82,7 @@ export function DataTable({
   onEmptyAction,
   loading = false,
   loadingRows = 3,
+  footer = null,
 }) {
   if (!columns?.length) {
     return null;
@@ -143,6 +144,7 @@ export function DataTable({
           ) : null}
         </View>
       )}
+      {footer ? <View style={styles.footerWrap}>{footer}</View> : null}
     </View>
   );
 }
@@ -214,6 +216,16 @@ const styles = StyleSheet.create({
     backgroundColor: color.skeleton,
     borderRadius: 8,
     borderCurve: "continuous",
+  },
+  footerWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    borderTopWidth: 1,
+    borderTopColor: color.border,
+    backgroundColor: color.surface,
   },
   emptyWrap: {
     alignItems: "center",

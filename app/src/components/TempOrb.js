@@ -47,6 +47,29 @@ function fibonacciSphere(n) {
 
 const BASE_PTS = fibonacciSphere(DOT_COUNT);
 
+// Temperature -> heat 0..1 (15C cold .. 40C hot)
+const HEAT_MIN = 15;
+const HEAT_MAX = 40;
+function tempToHeat(t) {
+  if (typeof t !== "number" || Number.isNaN(t)) return null;
+  return Math.min(1, Math.max(0, (t - HEAT_MIN) / (HEAT_MAX - HEAT_MIN)));
+}
+
+// 3-stop gradient: blue (cold) -> amber (warm) -> red (hot)
+const GRADIENT = [
+  { at: 0, rgb: [37, 99, 235] },
+  { at: 0.5, rgb: [245, 158, 11] },
+  { at: 1, rgb: [185, 28, 28] },
+];
+function heatToColor(h) {
+  const x = Math.min(1, Math.max(0, h));
+  const [a, b] =
+    x <= 0.5 ? [GRADIENT[0], GRADIENT[1]] : [GRADIENT[1], GRADIENT[2]];
+  const local = (x - a.at) / (b.at - a.at);
+  const c = a.rgb.map((v, i) => Math.round(v + (b.rgb[i] - v) * local));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
 // Plain-JS projection shared by the mount precompute (no runtime needed).
 function projectAll(angle, swell, R, cx, cy) {
   const out = new Array(DOT_COUNT);
@@ -82,14 +105,21 @@ export function TempOrb({
   beatKey = 0,
   size = 200,
   dimmed = false,
+  temperature = null,
 }) {
   const reduceMotion = useReducedMotion();
   const focused = useIsFocused();
   const angleY = useSharedValue(0.6);
   const spinBoost = useSharedValue(0);
   const intensity = useSharedValue(0);
+  const ripple = useSharedValue(1);
+  const heat = useSharedValue(0.5);
   const dimSV = useSharedValue(dimmed ? 1 : 0);
   const firstBeat = useRef(true);
+
+  const heatTarget = tempToHeat(temperature);
+  const dotColor =
+    heatTarget == null ? tint : heatToColor(heatTarget);
 
   const R = (size * 0.8) / 2;
   const cx = size / 2;
@@ -126,21 +156,37 @@ export function TempOrb({
     const sinT = Math.sin(tilt);
     const swell = 1 + 0.04 * intensity.value;
     const rr = R * swell;
+    // Beat ripple: wavefront travels pole -> equator (d = 0 pole .. 1 equator)
+    const dFromPole = 1 - Math.abs(p[1]);
+    const r = ripple.value;
+    let wave = 0;
+    if (r > 0 && r < 1) {
+      const dist = Math.abs(dFromPole - r);
+      wave = Math.max(0, 1 - dist / 0.35) * (1 - r);
+    }
     const x1 = p[0] * cosA + p[2] * sinA;
     const z1 = -p[0] * sinA + p[2] * cosA;
     const y1 = p[1] * cosT - z1 * sinT;
     const z2 = p[1] * sinT + z1 * cosT;
     const depth = (z2 + 1) / 2;
     const s = 2.2 / (2.2 - z2);
-    const sx = cx + x1 * rr * s;
-    const sy = cy + y1 * rr * s;
-    const hx = sx - cx;
-    const hy = sy - cy;
+    let sx = cx + x1 * rr * s;
+    let sy = cy + y1 * rr * s;
+    let hx = sx - cx;
+    let hy = sy - cy;
+    const radialLen = Math.sqrt(hx * hx + hy * hy);
+    if (radialLen > 0.001 && wave > 0) {
+      const push = wave * 14;
+      sx += (hx / radialLen) * push;
+      sy += (hy / radialLen) * push;
+      hx = sx - cx;
+      hy = sy - cy;
+    }
     if (hx * hx + hy * hy < HOLE_RADIUS * HOLE_RADIUS) {
       val.set(0, 0, -10000, -10000);
       return;
     }
-    const sc = 0.22 * (0.65 + 0.75 * depth) * swell;
+    const sc = 0.22 * (0.65 + 0.75 * depth) * swell * (1 + 0.6 * wave);
     val.set(sc, 0, sx - (TEX / 2) * sc, sy - (TEX / 2) * sc);
   });
 
@@ -162,6 +208,12 @@ export function TempOrb({
   }, [dimmed, dimSV]);
 
   useEffect(() => {
+    if (heatTarget != null) {
+      heat.set(withTiming(heatTarget, { duration: 500 }));
+    }
+  }, [heatTarget, heat]);
+
+  useEffect(() => {
     if (firstBeat.current) {
       firstBeat.current = false;
       return;
@@ -176,19 +228,23 @@ export function TempOrb({
         withTiming(0, { duration: 300 })
       )
     );
+    ripple.set(0);
+    ripple.set(withTiming(1, { duration: 700 }));
     spinBoost.set(2.4);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch {
       // haptics unsupported — visual beat still plays
     }
-  }, [beatKey, dimmed, reduceMotion, intensity, spinBoost]);
+  }, [beatKey, dimmed, reduceMotion, intensity, spinBoost, ripple]);
 
   const frame = useFrameCallback((info) => {
     "worklet";
     const dt = Math.min(0.05, (info.timeSincePreviousFrame ?? 16) / 1000);
     spinBoost.value *= Math.pow(0.02, dt);
-    angleY.value += dt * (BASE_SPEED + spinBoost.value);
+    // A: rotation speed follows temperature heat (0.15 .. 0.5 rad/s)
+    const heatSpeed = BASE_SPEED + heat.value * 0.35;
+    angleY.value += dt * (heatSpeed + spinBoost.value);
   });
 
   useEffect(() => {
@@ -197,7 +253,7 @@ export function TempOrb({
 
   const groupOpacity = useDerivedValue(() => 0.7 * (1 - 0.55 * dimSV.value));
 
-  const colors = useMemo(() => new Array(DOT_COUNT).fill(tint), [tint]);
+  const colors = useMemo(() => new Array(DOT_COUNT).fill(dotColor), [dotColor]);
 
   return (
     <View style={{ width: size, height: size }} accessible={false}>

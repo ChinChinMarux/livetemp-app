@@ -21,6 +21,7 @@ import { TempOrb } from "../components/TempOrb.js";
 import { tokens } from "../theme/tokens.js";
 
 const { color, space, radius, shadow } = tokens;
+const PAGE_SIZE = 5;
 
 function StatusChip({ connectionState, hasError, onRetry }) {
 	const config = useMemo(() => {
@@ -107,6 +108,7 @@ export function MonitoringScreen() {
 	const [loading, setLoading] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
 	const [apiError, setApiError] = useState(null);
+	const [page, setPage] = useState(0);
 	const reduceMotion = useReducedMotion();
 
 	const fetchReadings = useCallback(async () => {
@@ -118,6 +120,7 @@ export function MonitoringScreen() {
 				Api.getThresholds().catch(() => null),
 			]);
 			setReadings(history ?? []);
+			setPage(0);
 			const latest = Array.isArray(thresholds) ? thresholds[0]?.value : null;
 			setLatestThreshold(typeof latest === "number" ? latest : null);
 		} catch (err) {
@@ -183,6 +186,13 @@ export function MonitoringScreen() {
 	const tempLabel =
 		typeof temperature === "number" ? `${temperature.toFixed(2)}` : "--";
 
+	const pageCount = Math.max(1, Math.ceil(readings.length / PAGE_SIZE));
+	const safePage = Math.min(page, pageCount - 1);
+	const pageReadings = readings.slice(
+		safePage * PAGE_SIZE,
+		(safePage + 1) * PAGE_SIZE,
+	);
+
 	const beatKey =
 		typeof timestamp === "string" && !Number.isNaN(Date.parse(timestamp))
 			? Date.parse(timestamp)
@@ -229,6 +239,7 @@ export function MonitoringScreen() {
 							<TempOrb
 								tint={proximity ? proximity.statusColor : color.text}
 								beatKey={beatKey}
+								temperature={typeof temperature === "number" ? temperature : null}
 								dimmed={
 									connectionState !== "connected" &&
 									connectionState !== "reconnecting"
@@ -402,13 +413,58 @@ export function MonitoringScreen() {
 								typeof value === "number" ? Number(value).toFixed(2) : "--",
 						},
 					]}
-					data={readings}
+					data={pageReadings}
 					keyExtractor={(item) => item.id}
 					loading={loading && !refreshing}
 					emptyTitle="No readings yet"
 					emptyMessage="Triggered readings appear here. Pull to refresh."
 					emptyActionLabel="Refresh"
 					onEmptyAction={fetchReadings}
+					footer={
+						pageCount > 1 ? (
+							<>
+								<Pressable
+									onPress={() => setPage((p) => Math.max(0, p - 1))}
+									disabled={safePage === 0}
+									accessibilityLabel="Halaman sebelumnya"
+									accessibilityRole="button"
+									hitSlop={8}
+									style={({ pressed }) => [
+										styles.navButton,
+										safePage === 0 && styles.navButtonDisabled,
+										pressed && safePage !== 0 && styles.pressed,
+									]}
+								>
+									<Ionicons
+										name="chevron-back"
+										size={20}
+										color={safePage === 0 ? color.text3 : color.primary}
+									/>
+								</Pressable>
+								<Text style={styles.pageIndicator}>
+									{safePage + 1} / {pageCount}
+								</Text>
+								<Pressable
+									onPress={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+									disabled={safePage >= pageCount - 1}
+									accessibilityLabel="Halaman berikutnya"
+									accessibilityRole="button"
+									hitSlop={8}
+									style={({ pressed }) => [
+										styles.navButton,
+										safePage >= pageCount - 1 && styles.navButtonDisabled,
+										pressed && safePage < pageCount - 1 && styles.pressed,
+									]}
+								>
+									<Ionicons
+										name="chevron-forward"
+										size={20}
+										color={safePage >= pageCount - 1 ? color.text3 : color.primary}
+									/>
+								</Pressable>
+							</>
+						) : null
+					}
 				/>
 			</ScrollView>
 		</View>
@@ -552,6 +608,26 @@ const styles = StyleSheet.create({
 	countText: {
 		fontSize: 12,
 		fontWeight: "600",
+		color: color.text2,
+		fontVariant: ["tabular-nums"],
+	},
+	navButton: {
+		width: tokens.hit,
+		height: tokens.hit,
+		alignItems: "center",
+		justifyContent: "center",
+		borderRadius: radius.cta,
+		borderCurve: "continuous",
+		borderWidth: 1,
+		borderColor: color.border,
+		backgroundColor: color.surface,
+	},
+	navButtonDisabled: {
+		opacity: 0.4,
+	},
+	pageIndicator: {
+		fontSize: 13,
+		fontWeight: "700",
 		color: color.text2,
 		fontVariant: ["tabular-nums"],
 	},
